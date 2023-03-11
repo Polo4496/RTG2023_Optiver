@@ -94,39 +94,47 @@ class AutoTrader(BaseAutoTrader):
             etf_ask = ask_prices[0]
             etf_bid = bid_prices[0]
             mid_price_etf = (etf_bid + etf_ask) / 2
-            delta = 3 * TICK_SIZE_IN_CENTS
+            epsilon = 0.5 * TICK_SIZE_IN_CENTS
+            gamma = 0.5 * TICK_SIZE_IN_CENTS
+            mu = TICK_SIZE_IN_CENTS
+            delta = gamma + TICK_SIZE_IN_CENTS + mu
+            side = 1 if self.position > 0 else (-1 if self.position < 0 else 0)
 
             if etf_ask + delta < future_bid and self.bid_id == 0:
-
                 if self.ask_id != 0:
                     self.send_cancel_order(self.ask_id)
                     self.ask_id = 0
 
-                if self.position + LOT_SIZE <= POSITION_LIMIT:
+                volume = 2 * LOT_SIZE
+                if self.position + volume <= POSITION_LIMIT:
                     self.bid_id = next(self.order_ids)
-                    self.bid_price = int(etf_ask) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
-                    self.send_insert_order(self.bid_id, Side.BUY, self.bid_price, LOT_SIZE, Lifespan.GOOD_FOR_DAY)
+                    # self.bid_price = int(etf_ask) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+                    self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.bids.add(self.bid_id)
 
             elif etf_bid > delta + future_ask and self.ask_id == 0:
-
                 if self.bid_id != 0:
                     self.send_cancel_order(self.bid_id)
                     self.bid_id = 0
 
-                if self.position - LOT_SIZE >= -POSITION_LIMIT:
+                volume = 2 * LOT_SIZE
+                if self.position - volume >= -POSITION_LIMIT:
                     self.ask_id = next(self.order_ids)
-                    self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
-                    self.send_insert_order(self.ask_id, Side.SELL, self.ask_price, LOT_SIZE, Lifespan.GOOD_FOR_DAY)
+                    # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+                    self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.asks.add(self.ask_id)
 
-            elif mid_price_etf == mid_price_future:
+            elif (mid_price_etf <= mid_price_future + epsilon) and (mid_price_etf >= mid_price_future - epsilon):
                 if self.bid_id != 0:
-                    print("a")
-                    # close position
-                elif self.bid_ask != 0:
-                    # close position
-                    print("b")
+                    self.ask_id = next(self.order_ids)
+                    # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+                    self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, self.position, Lifespan.GOOD_FOR_DAY)
+                    self.asks.add(self.ask_id)
+                elif self.ask_id != 0:
+                    self.bid_id = next(self.order_ids)
+                    # self.bid_price = int(etf_ask) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+                    self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, -self.position, Lifespan.GOOD_FOR_DAY)
+                    self.bids.add(self.bid_id)
 
     def on_order_filled_message(self, client_order_id: int, price: int, volume: int) -> None:
         """Called when one of your orders is filled, partially or fully.
