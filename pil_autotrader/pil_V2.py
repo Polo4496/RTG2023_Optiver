@@ -49,6 +49,7 @@ class AutoTrader(BaseAutoTrader):
         self.future_last_ask_prices = []
         self.future_last_bid_prices = []
         self.ask_id = self.ask_price = self.bid_id = self.bid_price = self.position = 0
+        self.ETF_supF = False
 
     def on_error_message(self, client_order_id: int, error_message: bytes) -> None:
         """Called when the exchange detects an error.
@@ -95,12 +96,11 @@ class AutoTrader(BaseAutoTrader):
             etf_bid = bid_prices[0]
             mid_price_etf = (etf_bid + etf_ask) / 2
             epsilon = 0.5 * TICK_SIZE_IN_CENTS
-            gamma = 0.5 * TICK_SIZE_IN_CENTS
-            mu = TICK_SIZE_IN_CENTS
+            gamma = 0 * TICK_SIZE_IN_CENTS
+            mu = 1 * TICK_SIZE_IN_CENTS
             delta = gamma + TICK_SIZE_IN_CENTS + mu
-            side = 1 if self.position > 0 else (-1 if self.position < 0 else 0)
 
-            if etf_ask + delta < future_bid and self.bid_id == 0:
+            if future_bid - etf_ask > delta and self.bid_id == 0:
                 if self.ask_id != 0:
                     self.send_cancel_order(self.ask_id)
                     self.ask_id = 0
@@ -112,7 +112,7 @@ class AutoTrader(BaseAutoTrader):
                     self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.bids.add(self.bid_id)
 
-            elif etf_bid > delta + future_ask and self.ask_id == 0:
+            elif etf_bid - future_ask > delta and self.ask_id == 0:
                 if self.bid_id != 0:
                     self.send_cancel_order(self.bid_id)
                     self.bid_id = 0
@@ -124,7 +124,8 @@ class AutoTrader(BaseAutoTrader):
                     self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.asks.add(self.ask_id)
 
-            elif (mid_price_etf <= mid_price_future + epsilon) and (mid_price_etf >= mid_price_future - epsilon):
+            elif ((abs(mid_price_etf - mid_price_future) <= gamma + epsilon) \
+                    and (abs(mid_price_etf - mid_price_future) >= gamma - epsilon)):
                 if self.bid_id != 0:
                     self.ask_id = next(self.order_ids)
                     # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
