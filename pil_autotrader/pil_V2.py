@@ -106,11 +106,14 @@ class AutoTrader(BaseAutoTrader):
             # mu = 1 * TICK_SIZE_IN_CENTS
             delta = gamma + TICK_SIZE_IN_CENTS + self.mu
 
-            if future_bid - etf_ask > delta and self.bid_id == 0:
-                if self.ask_id != 0:
-                    self.send_cancel_order(self.ask_id)
-                    self.ask_id = 0
+            if self.bid_id != 0:
+                self.send_cancel_order(self.bid_id)
+                self.bid_id = 0
+            if self.ask_id != 0:
+                self.send_cancel_order(self.ask_id)
+                self.ask_id = 0
 
+            if future_bid - etf_ask > delta:
                 volume = 2 * LOT_SIZE
                 if self.position + volume <= POSITION_LIMIT:
                     self.bid_id = next(self.order_ids)
@@ -118,17 +121,31 @@ class AutoTrader(BaseAutoTrader):
                     self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.bids.add(self.bid_id)
 
-            elif etf_bid - future_ask > delta and self.ask_id == 0:
-                if self.bid_id != 0:
-                    self.send_cancel_order(self.bid_id)
-                    self.bid_id = 0
-
+            elif etf_bid - future_ask > delta:
                 volume = 2 * LOT_SIZE
                 if self.position - volume >= -POSITION_LIMIT:
                     self.ask_id = next(self.order_ids)
                     # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
                     self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.asks.add(self.ask_id)
+
+            elif future_bid - etf_bid - TICK_SIZE_IN_CENTS > delta:
+                volume = 2 * LOT_SIZE
+                if self.position + volume <= POSITION_LIMIT:
+                    self.bid_id = next(self.order_ids)
+                    # self.bid_price = int(etf_ask) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+                    self.send_insert_order(self.bid_id, Side.BUY, etf_bid + TICK_SIZE_IN_CENTS, volume, Lifespan.GOOD_FOR_DAY)
+                    self.bids.add(self.bid_id)
+
+            elif etf_ask - future_ask - TICK_SIZE_IN_CENTS > delta:
+                volume = 2 * LOT_SIZE
+                if self.position - volume >= -POSITION_LIMIT:
+                    self.ask_id = next(self.order_ids)
+                    # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+                    self.send_insert_order(self.ask_id, Side.SELL, etf_ask - TICK_SIZE_IN_CENTS, volume, Lifespan.GOOD_FOR_DAY)
+                    self.asks.add(self.ask_id)
+
+
 
             elif ((abs(mid_price_etf - mid_price_future) <= gamma + epsilon) \
                   and (abs(mid_price_etf - mid_price_future) >= gamma - epsilon)):
