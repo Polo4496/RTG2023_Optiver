@@ -151,10 +151,10 @@ class AutoTrader(BaseAutoTrader):
                 self.bids.add(self.bid_id)
 
             # Estimate mu
-            if self.ETF_sup_F != (mid_price_etf > mid_price_future) and self.position != 0:
-                self.sum_mu += mid_price_etf - etf_bid
-                self.number_cross += 1
-                self.mu = self.sum_mu / self.number_cross
+            # if self.ETF_sup_F != (mid_price_etf > mid_price_future) and self.position != 0:
+            self.sum_mu += mid_price_etf - etf_bid
+            self.number_cross += 1
+            self.mu = self.sum_mu / self.number_cross
 
     def on_order_filled_message(self, client_order_id: int, price: int, volume: int) -> None:
         """Called when one of your orders is filled, partially or fully.
