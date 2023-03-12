@@ -50,7 +50,6 @@ class AutoTrader(BaseAutoTrader):
         self.future_last_bid_prices = []
         self.ask_id = self.ask_price = self.bid_id = self.bid_price = self.position = 0
 
-
         # The attributes used in the computation of \mu
         self.ETF_sup_F = False
         self.sum_mu = 0
@@ -101,11 +100,11 @@ class AutoTrader(BaseAutoTrader):
             etf_ask = ask_prices[0]
             etf_bid = bid_prices[0]
             mid_price_etf = (etf_bid + etf_ask) / 2
-            epsilon = 0.5 * TICK_SIZE_IN_CENTS
+            epsilon = 0.8 * TICK_SIZE_IN_CENTS
             gamma = 0 * TICK_SIZE_IN_CENTS
-            # mu = 1 * TICK_SIZE_IN_CENTS
+            self.mu = mid_price_etf - etf_bid if self.number_cross == 0 else self.mu
             delta = gamma + TICK_SIZE_IN_CENTS + self.mu
-
+            # Delete active orders
             if self.bid_id != 0:
                 self.send_cancel_order(self.bid_id)
                 self.bid_id = 0
@@ -113,61 +112,53 @@ class AutoTrader(BaseAutoTrader):
                 self.send_cancel_order(self.ask_id)
                 self.ask_id = 0
 
+            # Check delta spread when ETF > F or F > ETF
             if future_bid - etf_ask > delta:
                 volume = 2 * LOT_SIZE
                 if self.position + volume <= POSITION_LIMIT:
                     self.bid_id = next(self.order_ids)
-                    # self.bid_price = int(etf_ask) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
                     self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.bids.add(self.bid_id)
-
             elif etf_bid - future_ask > delta:
                 volume = 2 * LOT_SIZE
                 if self.position - volume >= -POSITION_LIMIT:
                     self.ask_id = next(self.order_ids)
-                    # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
                     self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, volume, Lifespan.GOOD_FOR_DAY)
                     self.asks.add(self.ask_id)
 
+            # Check delta spread with limit order (when F and ETF are crossed)
             elif future_bid - etf_bid - TICK_SIZE_IN_CENTS > delta:
                 volume = 2 * LOT_SIZE
                 if self.position + volume <= POSITION_LIMIT:
                     self.bid_id = next(self.order_ids)
-                    # self.bid_price = int(etf_ask) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
                     self.send_insert_order(self.bid_id, Side.BUY, etf_bid + TICK_SIZE_IN_CENTS, volume, Lifespan.GOOD_FOR_DAY)
                     self.bids.add(self.bid_id)
-
             elif etf_ask - future_ask - TICK_SIZE_IN_CENTS > delta:
                 volume = 2 * LOT_SIZE
                 if self.position - volume >= -POSITION_LIMIT:
                     self.ask_id = next(self.order_ids)
-                    # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
                     self.send_insert_order(self.ask_id, Side.SELL, etf_ask - TICK_SIZE_IN_CENTS, volume, Lifespan.GOOD_FOR_DAY)
                     self.asks.add(self.ask_id)
 
-
-
-            elif ((abs(mid_price_etf - mid_price_future) <= gamma + epsilon) \
+            # Close positions around equality mid-prices
+            elif ((abs(mid_price_etf - mid_price_future) <= gamma + epsilon)
                   and (abs(mid_price_etf - mid_price_future) >= gamma - epsilon)):
                 if self.bid_id != 0:
                     self.ask_id = next(self.order_ids)
-                    # self.ask_price = int(etf_bid) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
                     self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, self.position,
                                            Lifespan.GOOD_FOR_DAY)
                     self.asks.add(self.ask_id)
                 elif self.ask_id != 0:
                     self.bid_id = next(self.order_ids)
-                    # self.bid_price = int(etf_ask) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
                     self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, -self.position,
                                            Lifespan.GOOD_FOR_DAY)
                     self.bids.add(self.bid_id)
 
+            # Estimate mu
             if self.ETF_sup_F != (mid_price_etf > mid_price_future) and self.position != 0:
-                print("Change ", mid_price_future - mid_price_etf)
                 self.sum_mu += mid_price_etf - etf_bid
                 self.number_cross += 1
                 self.mu = self.sum_mu / self.number_cross
-                print("\\mu = ", self.mu, "\nN = ", self.number_cross, "\n-----------pil_V2.py")
 
     def on_order_filled_message(self, client_order_id: int, price: int, volume: int) -> None:
         """Called when one of your orders is filled, partially or fully.
