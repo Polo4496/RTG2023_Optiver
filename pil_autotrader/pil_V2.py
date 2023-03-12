@@ -100,10 +100,10 @@ class AutoTrader(BaseAutoTrader):
             etf_ask = ask_prices[0]
             etf_bid = bid_prices[0]
             mid_price_etf = (etf_bid + etf_ask) / 2
-            epsilon = 1 * TICK_SIZE_IN_CENTS
+            epsilon = 0.8 * TICK_SIZE_IN_CENTS
+            gamma = 0 * TICK_SIZE_IN_CENTS
             self.mu = mid_price_etf - etf_bid if self.number_cross == 0 else self.mu
-            delta = TICK_SIZE_IN_CENTS + self.mu
-
+            delta = gamma + TICK_SIZE_IN_CENTS + self.mu
             # Delete active orders
             if self.bid_id != 0:
                 self.send_cancel_order(self.bid_id)
@@ -114,35 +114,29 @@ class AutoTrader(BaseAutoTrader):
 
             # Check delta spread when ETF > F or F > ETF
             if future_bid - etf_ask > delta:
-                volume = min(3 * LOT_SIZE, POSITION_LIMIT - self.position)
-                if volume != 0:
-                    self.bid_id = next(self.order_ids)
-                    self.send_insert_order(self.bid_id, Side.BUY, etf_ask + TICK_SIZE_IN_CENTS, volume,
-                                           Lifespan.GOOD_FOR_DAY)
-                    self.bids.add(self.bid_id)
+                volume = POSITION_LIMIT-self.position
+                self.bid_id = next(self.order_ids)
+                self.send_insert_order(self.bid_id, Side.BUY, etf_ask, volume, Lifespan.GOOD_FOR_DAY)
+                self.bids.add(self.bid_id)
             elif etf_bid - future_ask > delta:
-                volume = min(3 * LOT_SIZE, POSITION_LIMIT + self.position)
-                if volume != 0:
-                    self.ask_id = next(self.order_ids)
-                    self.send_insert_order(self.ask_id, Side.SELL, etf_bid - TICK_SIZE_IN_CENTS, volume,
-                                           Lifespan.GOOD_FOR_DAY)
-                    self.asks.add(self.ask_id)
+                volume = abs(-POSITION_LIMIT-self.position)
+                print("volume_1",volume)
+                self.ask_id = next(self.order_ids)
+                self.send_insert_order(self.ask_id, Side.SELL, etf_bid, volume, Lifespan.GOOD_FOR_DAY)
+                self.asks.add(self.ask_id)
 
             # Check delta spread with limit order (when F and ETF are crossed)
             elif future_bid - etf_bid - TICK_SIZE_IN_CENTS > delta:
-                volume = min(10 * LOT_SIZE, POSITION_LIMIT - self.position)
-                if volume != 0:
-                    self.bid_id = next(self.order_ids)
-                    self.send_insert_order(self.bid_id, Side.BUY, etf_bid + TICK_SIZE_IN_CENTS, volume,
-                                           Lifespan.GOOD_FOR_DAY)
-                    self.bids.add(self.bid_id)
+                volume = POSITION_LIMIT-self.position
+                self.bid_id = next(self.order_ids)
+                self.send_insert_order(self.bid_id, Side.BUY, etf_bid + TICK_SIZE_IN_CENTS, volume, Lifespan.GOOD_FOR_DAY)
+                self.bids.add(self.bid_id)
             elif etf_ask - future_ask - TICK_SIZE_IN_CENTS > delta:
-                volume = min(10 * LOT_SIZE, POSITION_LIMIT + self.position)
-                if volume != 0:
-                    self.ask_id = next(self.order_ids)
-                    self.send_insert_order(self.ask_id, Side.SELL, etf_ask - TICK_SIZE_IN_CENTS, volume,
-                                           Lifespan.GOOD_FOR_DAY)
-                    self.asks.add(self.ask_id)
+                volume = abs(-POSITION_LIMIT-self.position)
+                print("volume",volume)
+                self.ask_id = next(self.order_ids)
+                self.send_insert_order(self.ask_id, Side.SELL, etf_ask - TICK_SIZE_IN_CENTS, volume, Lifespan.GOOD_FOR_DAY)
+                self.asks.add(self.ask_id)
 
             # Close positions if > epsilon
             elif etf_bid - future_ask > epsilon and self.position > 0:
