@@ -62,7 +62,6 @@ class AutoTrader(BaseAutoTrader):
         If the error pertains to a particular order, then the client_order_id
         will identify that order, otherwise the client_order_id will be zero.
         """
-        self.logger.warning("error with order %d: %s", client_order_id, error_message.decode())
         if client_order_id != 0 and (client_order_id in self.bids or client_order_id in self.asks):
             self.on_order_status_message(client_order_id, 0, 0, 0)
 
@@ -73,8 +72,6 @@ class AutoTrader(BaseAutoTrader):
         which may be better than the order's limit price. The volume is
         the number of lots filled at that price.
         """
-        self.logger.info("received hedge filled for order %d with average price %d and volume %d", client_order_id,
-                         price, volume)
 
     def on_order_book_update_message(self, instrument: int, sequence_number: int, ask_prices: List[int],
                                      ask_volumes: List[int], bid_prices: List[int], bid_volumes: List[int]) -> None:
@@ -85,8 +82,6 @@ class AutoTrader(BaseAutoTrader):
         prices are reported along with the volume available at each of those
         price levels.
         """
-        self.logger.info("received order book for instrument %d with sequence number %d", instrument,
-                         sequence_number)
 
         if instrument == Instrument.FUTURE:
             self.future_last_ask_prices = ask_prices
@@ -120,7 +115,6 @@ class AutoTrader(BaseAutoTrader):
                 self.bids.add(self.bid_id)
             elif etf_bid - future_ask > delta:
                 volume = abs(-POSITION_LIMIT-self.position)
-                print("volume_1",volume)
                 self.ask_id = next(self.order_ids)
                 self.send_insert_order(self.ask_id, Side.SELL, etf_bid, volume, Lifespan.GOOD_FOR_DAY)
                 self.asks.add(self.ask_id)
@@ -133,28 +127,27 @@ class AutoTrader(BaseAutoTrader):
                 self.bids.add(self.bid_id)
             elif etf_ask - future_ask - TICK_SIZE_IN_CENTS > delta:
                 volume = abs(-POSITION_LIMIT-self.position)
-                print("volume",volume)
                 self.ask_id = next(self.order_ids)
                 self.send_insert_order(self.ask_id, Side.SELL, etf_ask - TICK_SIZE_IN_CENTS, volume, Lifespan.GOOD_FOR_DAY)
                 self.asks.add(self.ask_id)
 
             # Close positions if > epsilon
-            elif etf_bid - future_ask > epsilon and self.position > 0:
-                self.ask_id = next(self.order_ids)
-                self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, 3 * LOT_SIZE,
-                                       Lifespan.GOOD_FOR_DAY)
-                self.asks.add(self.ask_id)
-            elif future_bid - etf_ask > epsilon and self.position < 0:
-                self.bid_id = next(self.order_ids)
-                self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, 3 * LOT_SIZE,
-                                       Lifespan.GOOD_FOR_DAY)
-                self.bids.add(self.bid_id)
+            # elif etf_bid - future_ask > epsilon and self.position > 0:
+            #     self.ask_id = next(self.order_ids)
+            #     self.send_insert_order(self.ask_id, Side.SELL, MIN_BID_NEAREST_TICK, 3 * LOT_SIZE,
+            #                            Lifespan.GOOD_FOR_DAY)
+            #     self.asks.add(self.ask_id)
+            # elif future_bid - etf_ask > epsilon and self.position < 0:
+            #     self.bid_id = next(self.order_ids)
+            #     self.send_insert_order(self.bid_id, Side.BUY, MAX_ASK_NEAREST_TICK, 3 * LOT_SIZE,
+            #                            Lifespan.GOOD_FOR_DAY)
+            #     self.bids.add(self.bid_id)
 
             # Estimate mu
-            # if self.ETF_sup_F != (mid_price_etf > mid_price_future) and self.position != 0:
-            self.sum_mu += mid_price_etf - etf_bid
-            self.number_cross += 1
-            self.mu = self.sum_mu / self.number_cross
+            if self.ETF_sup_F != (mid_price_etf > mid_price_future) and self.position != 0:
+                self.sum_mu += mid_price_etf - etf_bid
+                self.number_cross += 1
+                self.mu = self.sum_mu / self.number_cross
 
     def on_order_filled_message(self, client_order_id: int, price: int, volume: int) -> None:
         """Called when one of your orders is filled, partially or fully.
@@ -163,8 +156,6 @@ class AutoTrader(BaseAutoTrader):
         which may be better than the order's limit price. The volume is
         the number of lots filled at that price.
         """
-        self.logger.info("received order filled for order %d with price %d and volume %d", client_order_id,
-                         price, volume)
         if client_order_id in self.bids:
             self.position += volume
             self.send_hedge_order(next(self.order_ids), Side.ASK, MIN_BID_NEAREST_TICK, volume)
@@ -183,8 +174,6 @@ class AutoTrader(BaseAutoTrader):
 
         If an order is cancelled its remaining volume will be zero.
         """
-        self.logger.info("received order status for order %d with fill volume %d remaining %d and fees %d",
-                         client_order_id, fill_volume, remaining_volume, fees)
         if remaining_volume == 0:
             if client_order_id == self.bid_id:
                 self.bid_id = 0
@@ -206,5 +195,4 @@ class AutoTrader(BaseAutoTrader):
         If there are less than five prices on a side, then zeros will appear at
         the end of both the prices and volumes arrays.
         """
-        self.logger.info("received trade ticks for instrument %d with sequence number %d", instrument,
-                         sequence_number)
+        pass
